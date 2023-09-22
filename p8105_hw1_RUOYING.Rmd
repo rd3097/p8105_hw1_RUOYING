@@ -1,0 +1,49 @@
+---
+title: "p8105_hw1_RUOYING"
+author: "RUOYING DENG"
+date: "2023-09-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+usethis::use_git_config(user.name ="rd3097", user.email = "rd3097@cumc.columbica.edu")
+library("tidyverse")
+library("moderndive")
+```
+## Problem 1
+```{r}
+data("early_january_weather")
+skimr::skim(early_january_weather)
+```
+The variable names included in this datasets are `r colnames(early_january_weather)`.
+
+The size of the data sets is that it has `r nrow(early_january_weather)` rows.
+
+The number of columns is `r ncol(early_january_weather)`.
+
+The mean temperature of early january weather is `r mean(early_january_weather$temp)`degrees.
+
+```{r}
+ggplot(early_january_weather,aes(x = time_hour, y = temp, color = humid)) + geom_point()
+```
+> This graph shows that the temperature tends to become higher during early January, and achieves its highest peak at January 14th. The temperature also vibrate a lot each day. The humidity acheives its highest before January 14th.
+
+```{r}
+ggsave("weather_scatterplot.pdf")
+```
+
+#Problem 2
+```{r}
+
+df = tibble(
+  vec_numeric = rnorm(10),
+  vec_logical = c(vec_numeric > 0),
+  vec_char = c("Red", "Yellow", "Green", "Red", "Red", "Yellow", "Red", "Green", "Green", "Yellow"),
+  vec_factor <- factor(vec_char, levels =c("Level1", "Level2", "Level3"))
+)
+print(df)
+```

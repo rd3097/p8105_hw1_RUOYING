@@ -1,0 +1,218 @@
+---
+title: "Take a `moderndive` into introductory linear regression with R"
+author: "Albert Y. Kim, Chester Ismay, and Max Kuhn"
+date: "`r Sys.Date()`"
+vignette: >
+  %\VignetteIndexEntry{Take a `moderndive` into introductory linear regression with R}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+tags:
+  - R
+  - Rstats
+  - tidyverse
+  - regression
+  - moderndive
+  - modeling
+  - modelling
+  - kaggle
+authors:
+  - name: Albert Y. Kim
+    orcid: 0000-0001-7824-306X
+    affiliation: 1 
+  - name: Chester Ismay
+    orcid: 0000-0003-2820-2547
+    affiliation: 2
+  - name: Max Kuhn
+    orcid: 0000-0003-2402-136X
+    affiliation: 3   
+affiliations:
+ - name: Assistant Professor of Statistical and Data Sciences, Smith College, Northampton, MA, USA.
+   index: 1
+ - name: Data Science Evangelist, DataRobot, Portland, OR, USA.
+   index: 2
+ - name: Software Engineer, RStudio, USA.
+   index: 3
+bibliography: paper.bib
+# output:
+#   rticles::joss_article:
+#     keep_md: yes
+#     number_sections: yes
+---
+
+```{r, include = FALSE}
+# knitr settings
+knitr::opts_chunk$set(
+  # Code output:
+  warning = FALSE,
+  message = FALSE,
+  echo = TRUE,
+  # Figure:
+  out.width = "100%",
+  fig.width = 16 / 2.5,
+  fig.height = 9 / 2.5,
+  fig.align = "center",
+  fig.show = "hold",
+  # Etc:
+  collapse = TRUE,
+  comment = "##"
+  # tidy = FALSE
+)
+
+# Needed packages in vignette
+library(moderndive)
+library(ggplot2)
+library(dplyr)
+library(knitr)
+library(broom)
+
+# Needed packages internally
+library(patchwork)
+
+# Random number generator seed value
+set.seed(76)
+
+# Set ggplot defaults for rticles output:
+if (!knitr::is_html_output()) {
+  # Grey theme:
+  theme_set(theme_light())
+
+  scale_colour_discrete <- ggplot2::scale_colour_viridis_d
+}
+
+
+# Set output width for rticles:
+options(width = 70)
+```
+
+
+# Summary
+
+We present the [`moderndive`](https://moderndive.github.io/moderndive/){target="_blank"} R package of datasets and functions for [tidyverse](https://www.tidyverse.org/)-friendly introductory linear regression [@tidyverse2019]. These tools leverage the well-developed `tidyverse` and `broom` packages to facilitate 1) working with regression tables that include confidence intervals, 2) accessing regression outputs on an observation level (e.g. fitted/predicted values and residuals), 3) inspecting scalar summaries of regression fit (e.g. $R^2$, $R^2_{adj}$, and mean squared error), and 4) visualizing parallel slopes regression models using `ggplot2`-like syntax [@R-ggplot2; @R-broom]. This R package is designed to supplement the book "Statistical Inference via Data Science: A ModernDive into R and the Tidyverse" [@ismay2019moderndive]. Note that the book is also available online at https://moderndive.com and is referred to as "ModernDive" for short.
+
+
+# Statement of Need
+
+Linear regression has long been a staple of introductory statistics courses. While the curricula of introductory statistics courses has much evolved of late, the overall importance of regression remains the same [@ASAGuidelines]. Furthermore, while the use of the R statistical programming language for statistical analysis is not new, recent developments such as the `tidyverse` suite of packages have made statistical computation with R accessible to a broader audience [@tidyverse2019]. We go one step further by leveraging the `tidyverse` and the `broom` packages to make linear regression accessible to students taking an introductory statistics course [@R-broom]. Such students are likely to be new to statistical computation with R; we designed `moderndive` with these students in mind. 
+
+
+# Introduction
+
+Let's load all the R packages we are going to need.
+
+```{r}
+library(moderndive)
+library(ggplot2)
+library(dplyr)
+library(knitr)
+library(broom)
+```
+
+Let's consider data gathered from end of semester student evaluations for a sample of 463 courses taught by 94 professors from the University of Texas at Austin [@diez2015openintro]. This data is included in the `evals` data frame from the `moderndive` package.
+
+```{r, echo=FALSE}
+evals_sample <- evals %>%
+  select(ID, prof_ID, score, age, bty_avg, gender, ethnicity, language, rank) %>%
+  sample_n(5)
+```
+
+In the following table, we present a subset of `r ncol(evals_sample)` of the `r ncol(evals)` variables included for a random sample of `r nrow(evals_sample)` courses^[For details on the remaining `r ncol(evals) - ncol(evals_sample)` variables, see the help file by running `?evals`.]:
+
+1. `ID` uniquely identifies the course whereas `prof_ID` identifies the professor who taught this course. This distinction is important since many professors taught more than one course.
+1. `score` is the outcome variable of interest: average professor evaluation score out of 5 as given by the students in this course.
+1. The remaining variables are demographic variables describing that course's instructor, including `bty_avg` (average "beauty" score) for that professor as given by a panel of 6 students.^[Note that `gender` was collected as a binary variable at the time of the study (2005).]
+
+```{r random-sample-courses, echo=FALSE}
+evals_sample %>%
+  kable()
+```
+
+
+
+## Regression analysis the "good old-fashioned" way
+
+Let's fit a simple linear regression model of teaching `score` as a function of instructor `age` using the `lm()` function.
+
+```{r}
+score_model <- lm(score ~ age, data = evals)
+```
+
+Let's now study the output of the fitted model `score_model` "the good old-fashioned way": using `summary()` which calls `summary.lm()` behind the scenes (we'll refer to them interchangeably throughout this paper).
+
+```{r}
+summary(score_model)
+```
+
+
+## Regression analysis using `moderndive`
+
+As an improvement to base R's regression functions, we've included three functions in the `moderndive` package that take a fitted model object as input and return the same information as `summary.lm()`, but output them in tidyverse-friendly format [@tidyverse2019]. As we'll see later, while these three functions are thin wrappers to existing functions in the `broom` package for converting statistical objects into tidy tibbles, we modified them with the introductory statistics student in mind [@R-broom].
+
+1. Get a tidy regression table **with confidence intervals**:
+    ```{r}
+get_regression_table(score_model)
+    ```
+2. Get information on each point/observation in your regression, including fitted/predicted values and residuals, in a single data frame:
+    ```{r}
+get_regression_points(score_model)
+    ```
+3. Get scalar summaries of a regression fit including $R^2$ and $R^2_{adj}$ but also the (root) mean-squared error:
+    ```{r}
+get_regression_summaries(score_model)
+    ```
+
+Furthermore, say you would like to create a visualization of the relationship between two numerical variables and a third categorical variable with $k$ levels. Let's create this using a colored scatterplot via the `ggplot2` package for data visualization [@R-ggplot2]. Using `geom_smooth(method = "lm", se = FALSE)` yields a visualization of an *interaction model* where each of the $k$ regression lines has their own intercept and slope. For example in \autoref{fig:interaction-model}, we extend our previous regression model by now mapping the categorical variable `ethnicity` to the `color` aesthetic.
+
+```{r interaction-model, fig.cap="Visualization of interaction model."}
+# Code to visualize interaction model:
+ggplot(evals, aes(x = age, y = score, color = ethnicity)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Age", y = "Teaching score", color = "Ethnicity")
+```
+
+However, many introductory statistics courses start with the easier to teach "common slope, different intercepts" regression model, also known as the *parallel slopes* model. However, no argument to plot such models exists within `geom_smooth()`.
+
+[Evgeni Chasnovski](https://github.com/echasnovski){target="_blank"} thus wrote a custom `geom_` extension to `ggplot2` called `geom_parallel_slopes()`; this extension is included in the `moderndive` package. Much like `geom_smooth()` from the `ggplot2` package, you add `geom_parallel_slopes()` as a layer to the code, resulting in \autoref{fig:parallel-slopes-model}.
+
+```{r parallel-slopes-model, fig.cap="Visualization of parallel slopes model."}
+# Code to visualize parallel slopes model:
+ggplot(evals, aes(x = age, y = score, color = ethnicity)) +
+  geom_point() +
+  geom_parallel_slopes(se = FALSE) +
+  labs(x = "Age", y = "Teaching score", color = "Ethnicity")
+```
+
+
+
+
+# Repository README
+
+In the GitHub repository README, we present an in-depth discussion of six features of the `moderndive` package:
+
+1. Focus less on p-value stars, more confidence intervals
+2. Outputs as tibbles
+3. Produce residual analysis plots from scratch using `ggplot2`
+4. A quick-and-easy Kaggle predictive modeling competition submission!
+5. Visual model selection: plot parallel slopes & interaction regression models
+6. Produce metrics on the quality of regression model fits
+
+Furthermore, we discuss the inner-workings of the `moderndive` package:
+
+1. It leverages the `broom` package in its wrappers
+1. It builds a custom `ggplot2` geometry for the `geom_parallel_slopes()` function that allows for quick visualization of parallel slopes models in regression. 
+
+
+
+
+
+
+# Author contributions
+
+Albert Y. Kim and Chester Ismay contributed equally to the development of the `moderndive` package. Albert Y. Kim wrote a majority of the initial version of this manuscript with Chester Ismay writing the rest. Max Kuhn provided guidance and feedback at various stages of the package development and manuscript writing. 
+
+
+# Acknowledgments
+
+Many thanks to Jenny Smetzer [\@smetzer180](https://github.com/smetzer180){target="_blank"}, Luke W. Johnston [\@lwjohnst86](https://github.com/lwjohnst86){target="_blank"}, and Lisa Rosenthal [\@lisamr](https://github.com/lisamr){target="_blank"} for their helpful feedback for this paper and to Evgeni Chasnovski [\@echasnovski](https://github.com/echasnovski){target="_blank"} for contributing the `geom_parallel_slopes()` function via GitHub [pull request](https://github.com/moderndive/moderndive/pull/55){target="_blank"}. The authors do not have any financial support to disclose.
+
+# References
